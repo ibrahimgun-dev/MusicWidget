@@ -16,20 +16,41 @@ namespace MusicWidget
 {
     public partial class MainWindow : Window
     {
+        // ==========================================
+        // 1. WIN32 API TANIMLAMALARI
+        // ==========================================
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        // Pencere Sabitleri
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
 
+        // Global Hotkey Sabitleri (Ctrl + Shift + M)
+        private const int HOTKEY_ID = 9000;
+        private const int WM_HOTKEY = 0x0312;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+        private const uint VK_M = 0x4D;
+
+        // ==========================================
+        // 2. GLOBAL DEĞİŞKENLER
+        // ==========================================
         private GlobalSystemMediaTransportControlsSessionManager? _manager;
         private GlobalSystemMediaTransportControlsSession? _session;
         private WasapiLoopbackCapture? _capture;
         
         private const int BarCount = 15; 
         private Rectangle[] _bars = new Rectangle[BarCount];
-        private bool _isPinned = true; // Başlangıçta sabit (pinned) varsayıyoruz
+        private bool _isPinned = true; 
         private DispatcherTimer? _keepAliveTimer; 
         private double _currentBaseHue = 190.0; 
         private string _posFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pos.txt");
@@ -38,22 +59,72 @@ namespace MusicWidget
         {
             InitializeComponent();
             
-            // Pencere görünmeden önce konumu ayarla (Zıplamayı önler)
             LoadPosition(); 
-            
             SetupVisualizer();
             StartListening();
             this.Topmost = true; 
 
+            // İnatçı Anti-Minimize Koruması
             this.StateChanged += (s, e) => { if (this.WindowState == WindowState.Minimized) { this.WindowState = WindowState.Normal; ForceTopmost(); } };
             this.Deactivated += (s, e) => ForceTopmost();
 
             SetupKeepOnTop();
+
+            // Hotkey için mesaj dinleme kancasını (Hook) başlat
+            this.SourceInitialized += MainWindow_SourceInitialized;
         }
 
+        // ==========================================
+        // 3. GLOBAL HOTKEY (YENİ EKLENEN KISIM)
+        // ==========================================
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            HwndSource source = HwndSource.FromHwnd(hwnd);
+            source?.AddHook(HwndHook);
+
+            // Ctrl + Shift + M kısayolunu kaydet
+            RegisterHotKey(hwnd, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_M);
+        }
+
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            {
+                ToggleWidgetVisibility();
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        private void ToggleWidgetVisibility()
+        {
+            if (this.Visibility == Visibility.Visible)
+            {
+                this.Visibility = Visibility.Hidden;
+                // Gizlendiğinde gereksiz API çağrılarını durdur
+                _keepAliveTimer?.Stop(); 
+            }
+            else
+            {
+                this.Visibility = Visibility.Visible;
+                this.WindowState = WindowState.Normal;
+                this.Activate();
+                // Ekrana dönünce inatçı korumayı tekrar başlat
+                _keepAliveTimer?.Start(); 
+                ForceTopmost();
+            }
+        }
+
+        // ==========================================
+        // 4. ARAYÜZ VE GÜÇLÜ KORUMA METOTLARI
+        // ==========================================
         private void ForceTopmost()
         {
             try {
+                // Görünmez durumdaysa API'yi yormamak için atla
+                if (this.Visibility != Visibility.Visible) return;
+
                 IntPtr hwnd = new WindowInteropHelper(this).Handle;
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             } catch { }
@@ -73,12 +144,11 @@ namespace MusicWidget
                     string[] pos = System.IO.File.ReadAllText(_posFile).Split('|');
                     this.Left = double.Parse(pos[0]);
                     this.Top = double.Parse(pos[1]);
-                    _isPinned = true; // Kayıtlı konum varsa direkt sabit başla
+                    _isPinned = true; 
                     return;
                 }
             } catch { }
             
-            // Dosya yoksa sağ altta başla ve serbest bırak
             this.Top = SystemParameters.PrimaryScreenHeight - this.Height; 
             this.Left = SystemParameters.PrimaryScreenWidth - 450;
             _isPinned = false; 
@@ -105,9 +175,11 @@ namespace MusicWidget
 
         private void Exit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
 
+        // ==========================================
+        // 5. MEDYA BİLGİSİ VE KONTROLLER
+        // ==========================================
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Menüdeki tiki konumun durumuna göre senkronize et
             PinMenuItem.IsChecked = _isPinned;
             this.Cursor = _isPinned ? Cursors.Arrow : Cursors.SizeAll;
 
@@ -153,6 +225,9 @@ namespace MusicWidget
         private async void PlayPauseBtn_Click(object sender, RoutedEventArgs e) => await _session?.TryTogglePlayPauseAsync()!;
         private async void NextBtn_Click(object sender, RoutedEventArgs e) => await _session?.TrySkipNextAsync()!;
 
+        // ==========================================
+        // 6. GÖRSELLEŞTİRİCİ (VISUALIZER) VE NAUDIO
+        // ==========================================
         private void SetupVisualizer()
         {
             VisualizerCanvas.Children.Clear();
@@ -215,6 +290,15 @@ namespace MusicWidget
             return v1;
         }
 
-        protected override void OnClosed(EventArgs e) { _keepAliveTimer?.Stop(); base.OnClosed(e); }
+        // ==========================================
+        // 7. TEMİZLİK
+        // ==========================================
+        protected override void OnClosed(EventArgs e) 
+        { 
+            _keepAliveTimer?.Stop(); 
+            var hwnd = new WindowInteropHelper(this).Handle;
+            UnregisterHotKey(hwnd, HOTKEY_ID);
+            base.OnClosed(e); 
+        }
     }
 }
