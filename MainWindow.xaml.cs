@@ -1,6 +1,7 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;                  // AsStreamForRead() extension metodu için gerekli
+using IO = System.IO;             // Path/File/Directory — System.Windows.Shapes.Path çakışmasını önler
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,7 +10,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
-using System.Windows.Interop;         
+using System.Windows.Interop;
 using NAudio.Wave;
 using Windows.Media.Control;
 
@@ -30,53 +31,54 @@ namespace MusicWidget
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-        private const uint SWP_NOSIZE = 0x0001;
-        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE     = 0x0001;
+        private const uint SWP_NOMOVE     = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
-
-        private const int HOTKEY_ID = 9000;
-        private const int WM_HOTKEY = 0x0312;
-        private const uint MOD_CONTROL = 0x0002;
-        private const uint MOD_SHIFT = 0x0004;
-        private const uint VK_M = 0x4D; // M Tuşu
+        private const int  HOTKEY_ID      = 9000;
+        private const int  WM_HOTKEY      = 0x0312;
+        private const uint MOD_CONTROL    = 0x0002;
+        private const uint MOD_SHIFT      = 0x0004;
+        private const uint VK_M           = 0x4D; // M Tuşu
 
         // ==========================================
         // 2. GLOBAL DEĞİŞKENLER & ALTYAPI
         // ==========================================
         private GlobalSystemMediaTransportControlsSessionManager? _manager;
-        private GlobalSystemMediaTransportControlsSession? _session;
-        private WasapiLoopbackCapture? _capture;
-        
-        private const int BarCount = 15; 
-        private Rectangle[] _bars = new Rectangle[BarCount];
-        private bool _isPinned = true; 
-        private DispatcherTimer? _keepAliveTimer; 
-        private double _currentBaseHue = 190.0; 
-        
-        // Yerel Dosya Kayıt Yolları
-        private string _posFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pos.txt");
-        private string _langFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lang.txt");
+        private GlobalSystemMediaTransportControlsSession?        _session;
+        private WasapiLoopbackCapture?                            _capture;
+
+        private const int    BarCount = 15;
+        private Rectangle[]  _bars   = new Rectangle[BarCount];
+        private bool         _isPinned = true;
+        private DispatcherTimer? _keepAliveTimer;
+        private double       _currentBaseHue = 190.0;
+
+        // FIX #4: %AppData% kullan — Program Files yazma izni sorununu önler
+        private static readonly string _appDataDir =
+            IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MusicWidget");
+        private readonly string _posFile  = IO.Path.Combine(_appDataDir, "pos.txt");
+        private readonly string _langFile = IO.Path.Combine(_appDataDir, "lang.txt");
 
         // ==========================================
-        // 3. CANLI DİL DESTEĞİ SÖZLÜKLERİ (v1.2)
+        // 3. CANLI DİL DESTEĞİ SÖZLÜKLERİ
         // ==========================================
-        private bool _isEnglish = false; 
+        private bool _isEnglish = false;
 
         private readonly Dictionary<string, string> _textsTR = new()
         {
-            { "Pin", "Konumu Sabitle" },
-            { "Language", "Language: English" },
-            { "Exit", "Çıkış" },
-            { "UnknownTitle", "Bilinmiyor" },
+            { "Pin",           "Konumu Sabitle"    },
+            { "Language",      "Language: English" },
+            { "Exit",          "Çıkış"             },
+            { "UnknownTitle",  "Bilinmiyor"        },
             { "UnknownArtist", "Şarkı bekleniyor..." }
         };
 
         private readonly Dictionary<string, string> _textsEN = new()
         {
-            { "Pin", "Pin Position" },
-            { "Language", "Dil: Türkçe" },
-            { "Exit", "Exit" },
-            { "UnknownTitle", "Unknown" },
+            { "Pin",           "Pin Position"      },
+            { "Language",      "Dil: Türkçe"       },
+            { "Exit",          "Exit"               },
+            { "UnknownTitle",  "Unknown"            },
             { "UnknownArtist", "Waiting for track..." }
         };
 
@@ -86,18 +88,25 @@ namespace MusicWidget
         public MainWindow()
         {
             InitializeComponent();
-            
-            LoadSettings(); // Kalıcı ayarları (dil ve konum) yükle
-            SetupVisualizer(); // Spektrum çubuklarını oluştur
-            StartListening(); // Ses kartını dinlemeye başla
-            this.Topmost = true; 
+            EnsureAppDataDir();     // FIX #4: klasör garantisi
+            LoadSettings();
+            SetupVisualizer();
+            StartListening();
 
-            // Win+D (Anti-Minimize) Koruma Tetikleyicileri
-            this.StateChanged += (s, e) => { if (this.WindowState == WindowState.Minimized) { this.WindowState = WindowState.Normal; ForceTopmost(); } };
+            this.Topmost = true;
+
+            this.StateChanged += (s, e) =>
+            {
+                if (this.WindowState == WindowState.Minimized)
+                {
+                    this.WindowState = WindowState.Normal;
+                    ForceTopmost();
+                }
+            };
             this.Deactivated += (s, e) => ForceTopmost();
 
-            SetupKeepOnTop(); // Win32 döngüsüyle en üstte kalmaya zorla
-            this.SourceInitialized += MainWindow_SourceInitialized; // Hotkey kancası
+            SetupKeepOnTop();
+            this.SourceInitialized += MainWindow_SourceInitialized;
         }
 
         // ==========================================
@@ -105,28 +114,25 @@ namespace MusicWidget
         // ==========================================
         private void ApplyLanguage()
         {
-            var currentTexts = _isEnglish ? _textsEN : _textsTR;
+            var t = _isEnglish ? _textsEN : _textsTR;
 
-            // XAML'deki ContextMenu (Sağ tık) elemanlarını güncelle
-            if (PinMenuItem != null) PinMenuItem.Header = currentTexts["Pin"];
-            if (LangMenuItem != null) LangMenuItem.Header = currentTexts["Language"];
-            if (ExitMenuItem != null) ExitMenuItem.Header = currentTexts["Exit"];
+            if (PinMenuItem  != null) PinMenuItem.Header  = t["Pin"];
+            if (LangMenuItem != null) LangMenuItem.Header = t["Language"];
+            if (ExitMenuItem != null) ExitMenuItem.Header = t["Exit"];
 
-            // Şarkı çalmadığı andaki sabit metinlerin çevirisi
-            if (TrackName.Text == _textsTR["UnknownTitle"] || TrackName.Text == _textsEN["UnknownTitle"])
-            {
-                TrackName.Text = currentTexts["UnknownTitle"];
-                ArtistName.Text = currentTexts["UnknownArtist"];
-            }
+            // Sadece placeholder metinleri çevir, gerçek şarkı adını dokunma
+            if (TrackName.Text  == _textsTR["UnknownTitle"]  || TrackName.Text  == _textsEN["UnknownTitle"])
+                TrackName.Text  = t["UnknownTitle"];
+            if (ArtistName.Text == _textsTR["UnknownArtist"] || ArtistName.Text == _textsEN["UnknownArtist"])
+                ArtistName.Text = t["UnknownArtist"];
         }
 
         private void LangMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            _isEnglish = !_isEnglish; 
-            ApplyLanguage(); // Değişikliği arayüze anında yansıt
-            
-            // Seçimi gelecekte hatırlamak üzere yerel dosyaya kaydet
-            try { System.IO.File.WriteAllText(_langFile, _isEnglish ? "EN" : "TR"); } catch { }
+            _isEnglish = !_isEnglish;
+            ApplyLanguage();
+            // FIX #4: artık %AppData%'ya yazıyor
+            try { IO.File.WriteAllText(_langFile, _isEnglish ? "EN" : "TR"); } catch { }
         }
 
         // ==========================================
@@ -134,8 +140,8 @@ namespace MusicWidget
         // ==========================================
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
         {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            HwndSource source = HwndSource.FromHwnd(hwnd);
+            var hwnd   = new WindowInteropHelper(this).Handle;
+            var source = HwndSource.FromHwnd(hwnd);
             source?.AddHook(HwndHook);
             RegisterHotKey(hwnd, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_M); // Ctrl+Shift+M
         }
@@ -155,80 +161,92 @@ namespace MusicWidget
             if (this.Visibility == Visibility.Visible)
             {
                 this.Visibility = Visibility.Hidden;
-                _keepAliveTimer?.Stop(); // Gizliyken sistemi yorma
+                _keepAliveTimer?.Stop();
             }
             else
             {
-                this.Visibility = Visibility.Visible;
+                this.Visibility  = Visibility.Visible;
                 this.WindowState = WindowState.Normal;
                 this.Activate();
-                _keepAliveTimer?.Start(); 
+                _keepAliveTimer?.Start();
                 ForceTopmost();
             }
         }
 
         private void ForceTopmost()
         {
-            try {
+            try
+            {
                 if (this.Visibility != Visibility.Visible) return;
-                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                var hwnd = new WindowInteropHelper(this).Handle;
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            } catch { }
+            }
+            catch { }
         }
 
         private void SetupKeepOnTop()
         {
-            // Win+D komutunu ezmek için 50ms'lik bir döngüyle penceremizi öne çekiyoruz
-            _keepAliveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-            _keepAliveTimer.Tick += (sender, args) => ForceTopmost();
+            // FIX #1: 50ms → 200ms — Win+D'ye karşı hâlâ etkili, CPU daha az yoruluyor
+            _keepAliveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _keepAliveTimer.Tick += (s, a) => ForceTopmost();
             _keepAliveTimer.Start();
         }
 
         // ==========================================
         // 7. AYARLARIN YÜKLENMESİ VE SÜRÜKLEME
         // ==========================================
+
+        // FIX #4: AppData klasörünü garantiye al
+        private static void EnsureAppDataDir()
+        {
+            try { IO.Directory.CreateDirectory(_appDataDir); } catch { }
+        }
+
         private void LoadSettings()
         {
             // Kayıtlı Dil Ayarını Oku
-            try {
-                if (System.IO.File.Exists(_langFile)) {
-                    _isEnglish = System.IO.File.ReadAllText(_langFile).Trim() == "EN";
-                }
-            } catch { }
+            try
+            {
+                if (IO.File.Exists(_langFile))
+                    _isEnglish = IO.File.ReadAllText(_langFile).Trim() == "EN";
+            }
+            catch { }
 
             // Kayıtlı Konum Ayarını Oku
-            try {
-                if (System.IO.File.Exists(_posFile)) {
-                    string[] pos = System.IO.File.ReadAllText(_posFile).Split('|');
-                    this.Left = double.Parse(pos[0]);
-                    this.Top = double.Parse(pos[1]);
-                    _isPinned = true; 
+            try
+            {
+                if (IO.File.Exists(_posFile))
+                {
+                    var pos    = IO.File.ReadAllText(_posFile).Split('|');
+                    this.Left  = double.Parse(pos[0]);
+                    this.Top   = double.Parse(pos[1]);
+                    _isPinned  = true;
                     return;
                 }
-            } catch { }
-            
-            // Eğer kayıtlı konum yoksa ekranın sağ altına hizala
-            this.Top = SystemParameters.PrimaryScreenHeight - this.Height; 
-            this.Left = SystemParameters.PrimaryScreenWidth - 450;
-            _isPinned = false; 
+            }
+            catch { }
+
+            // Kayıtlı konum yoksa ekranın sağ altına hizala
+            this.Top  = SystemParameters.PrimaryScreenHeight - this.Height;
+            this.Left = SystemParameters.PrimaryScreenWidth  - 450;
+            _isPinned = false;
         }
 
         private void SavePosition()
         {
-            try { System.IO.File.WriteAllText(_posFile, $"{this.Left}|{this.Top}"); } catch { }
+            try { IO.File.WriteAllText(_posFile, $"{this.Left}|{this.Top}"); } catch { }
         }
 
         private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Konum sabitlemesi kapalıysa pencereyi sürüklenebilir yap
             if (!_isPinned && e.ChangedButton == MouseButton.Left) this.DragMove();
         }
 
         private void TogglePin_Click(object sender, RoutedEventArgs e)
         {
-            _isPinned = PinMenuItem.IsChecked;
-            this.Cursor = _isPinned ? Cursors.Arrow : Cursors.SizeAll;
-            if (_isPinned) SavePosition(); // Sabitlendiği an konumu kaydet
+            _isPinned    = PinMenuItem.IsChecked;
+            this.Cursor  = _isPinned ? Cursors.Arrow : Cursors.SizeAll;
+            if (_isPinned) SavePosition();
         }
 
         private void Exit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
@@ -239,14 +257,15 @@ namespace MusicWidget
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             PinMenuItem.IsChecked = _isPinned;
-            this.Cursor = _isPinned ? Cursors.Arrow : Cursors.SizeAll;
-            
-            ApplyLanguage(); // Uygulama açılırken doğru dili bas
-            ForceTopmost(); 
+            this.Cursor           = _isPinned ? Cursors.Arrow : Cursors.SizeAll;
+            ApplyLanguage();
+            ForceTopmost();
 
             _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-            if (_manager != null) {
-                _manager.CurrentSessionChanged += (s, arg) => Dispatcher.Invoke(() => UpdateSession(s.GetCurrentSession()));
+            if (_manager != null)
+            {
+                _manager.CurrentSessionChanged += (s, _) =>
+                    Dispatcher.Invoke(() => UpdateSession(s.GetCurrentSession()));
                 UpdateSession(_manager.GetCurrentSession());
             }
         }
@@ -255,42 +274,66 @@ namespace MusicWidget
         {
             _session = session;
             if (session == null) return;
-            session.MediaPropertiesChanged += (s, a) => Dispatcher.Invoke(UpdateMediaProperties);
+
+            session.MediaPropertiesChanged += (_, _) =>
+                Dispatcher.Invoke(UpdateMediaProperties);
+
             UpdateMediaProperties();
         }
 
         private async void UpdateMediaProperties()
         {
-            if (_session == null) return;
-            var props = await _session.TryGetMediaPropertiesAsync();
-            
-            var currentTexts = _isEnglish ? _textsEN : _textsTR;
-            
-            string title = string.IsNullOrEmpty(props.Title) ? currentTexts["UnknownTitle"] : props.Title;
-            string artist = string.IsNullOrEmpty(props.Artist) ? currentTexts["UnknownArtist"] : props.Artist;
-            
-            TrackName.Text = title; 
+            // FIX #2: _session null guard — race condition önlenir
+            var session = _session;
+            if (session == null) return;
+
+            var props = await session.TryGetMediaPropertiesAsync();
+            if (props == null) return;
+
+            var t      = _isEnglish ? _textsEN : _textsTR;
+            var title  = string.IsNullOrWhiteSpace(props.Title)  ? t["UnknownTitle"]  : props.Title;
+            var artist = string.IsNullOrWhiteSpace(props.Artist) ? t["UnknownArtist"] : props.Artist;
+
+            TrackName.Text  = title;
             ArtistName.Text = artist;
 
-            // Matematiksel Akustik Renk İmzası (Hash Color)
-            string trackId = title + artist;
-            if (!string.IsNullOrEmpty(trackId)) {
+            // Hash Color: şarkıya özgü renk tonu
+            var trackId = title + artist;
+            if (!string.IsNullOrEmpty(trackId))
                 _currentBaseHue = Math.Abs(trackId.GetHashCode()) % 360;
-            }
 
-            // Albüm Kapağını Yakala ve Bas
-            if (props.Thumbnail != null) {
-                var stream = await props.Thumbnail.OpenReadAsync();
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit(); bitmap.StreamSource = stream.AsStreamForRead();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.EndInit();
-                AlbumArt.Source = bitmap;
+            // Albüm Kapağı
+            if (props.Thumbnail != null)
+            {
+                try
+                {
+                    var stream = await props.Thumbnail.OpenReadAsync();
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.StreamSource  = stream.AsStreamForRead();
+                    bitmap.CacheOption   = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    AlbumArt.Source = bitmap;
+                }
+                catch { /* thumbnail okunamazsa sessizce geç */ }
             }
         }
 
-        private async void PrevBtn_Click(object sender, RoutedEventArgs e) => await _session?.TrySkipPreviousAsync()!;
-        private async void PlayPauseBtn_Click(object sender, RoutedEventArgs e) => await _session?.TryTogglePlayPauseAsync()!;
-        private async void NextBtn_Click(object sender, RoutedEventArgs e) => await _session?.TrySkipNextAsync()!;
+        // FIX #5: null-forgiving (!) operatörü kaldırıldı, güvenli null-conditional kullanıldı
+        private async void PrevBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_session != null) await _session.TrySkipPreviousAsync();
+        }
+
+        private async void PlayPauseBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_session != null) await _session.TryTogglePlayPauseAsync();
+        }
+
+        private async void NextBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_session != null) await _session.TrySkipNextAsync();
+        }
 
         // ==========================================
         // 9. NAUDIO DONANIMSAL SES SPEKTRUMU
@@ -299,73 +342,110 @@ namespace MusicWidget
         {
             VisualizerCanvas.Children.Clear();
             double barWidth = (VisualizerCanvas.Width / BarCount) - 1.5;
-            for (int i = 0; i < BarCount; i++) {
-                var rect = new Rectangle { Width = barWidth, Height = 2, Fill = new SolidColorBrush(Colors.Cyan), RadiusX = 1, RadiusY = 1 };
-                Canvas.SetBottom(rect, 0); Canvas.SetLeft(rect, i * (barWidth + 1.5));
-                VisualizerCanvas.Children.Add(rect); _bars[i] = rect;
+            for (int i = 0; i < BarCount; i++)
+            {
+                var rect = new Rectangle
+                {
+                    Width    = barWidth,
+                    Height   = 2,
+                    Fill     = new SolidColorBrush(Colors.Cyan),
+                    RadiusX  = 1,
+                    RadiusY  = 1
+                };
+                Canvas.SetBottom(rect, 0);
+                Canvas.SetLeft(rect, i * (barWidth + 1.5));
+                VisualizerCanvas.Children.Add(rect);
+                _bars[i] = rect;
             }
         }
 
         private void StartListening()
         {
-            try {
+            try
+            {
                 _capture = new WasapiLoopbackCapture();
                 _capture.DataAvailable += OnAudioDataAvailable;
                 _capture.StartRecording();
-            } catch { }
+            }
+            catch { }
         }
 
         private void OnAudioDataAvailable(object? sender, WaveInEventArgs e)
         {
-            if (_bars[0] == null) return;
-            float[] peaks = new float[BarCount];
-            int bytesPerBar = e.BytesRecorded / BarCount;
-            for (int i = 0; i < BarCount; i++) {
-                float max = 0;
-                int start = i * bytesPerBar;
-                int end = Math.Min(start + bytesPerBar, e.BytesRecorded);
-                for (int j = start; j < end; j += 4) {
+            if (_bars[0] == null || e.BytesRecorded == 0) return;
+
+            float[] peaks       = new float[BarCount];
+            int     bytesPerBar = e.BytesRecorded / BarCount;
+
+            for (int i = 0; i < BarCount; i++)
+            {
+                float max   = 0;
+                int   start = i * bytesPerBar;
+                int   end   = Math.Min(start + bytesPerBar, e.BytesRecorded);
+
+                for (int j = start; j < end - 3; j += 4)  // -3: sınır taşması önlenir
+                {
                     float sample = Math.Abs(BitConverter.ToSingle(e.Buffer, j));
                     if (sample > max) max = sample;
                 }
                 peaks[i] = max;
             }
 
-            Dispatcher.InvokeAsync(() => {
-                for (int i = 0; i < BarCount; i++) {
+            Dispatcher.InvokeAsync(() =>
+            {
+                for (int i = 0; i < BarCount; i++)
+                {
                     double centerMultiplier = 1.0 - Math.Abs((BarCount / 2.0) - i) / (BarCount / 1.5);
-                    double newHeight = Math.Max(2, Math.Min(20, peaks[i] * 500 * Math.Max(0.4, centerMultiplier)));
-                    _bars[i].Height += (newHeight - _bars[i].Height) * 0.3; // Yumuşak geçiş sönümlenmesi
+                    double newHeight        = Math.Max(2, Math.Min(20, peaks[i] * 500 * Math.Max(0.4, centerMultiplier)));
+                    _bars[i].Height        += (newHeight - _bars[i].Height) * 0.3;
+
                     double lightness = 0.4 + (Math.Min(1.0, peaks[i] * 5) * 0.3);
-                    _bars[i].Fill = new SolidColorBrush(HslToRgb((_currentBaseHue + (i * 0.5)) % 360, 0.8, lightness));
+                    _bars[i].Fill    = new SolidColorBrush(HslToRgb((_currentBaseHue + (i * 0.5)) % 360, 0.8, lightness));
                 }
             });
         }
 
-        private Color HslToRgb(double h, double s, double l) {
+        private Color HslToRgb(double h, double s, double l)
+        {
             double hue = h / 360.0;
-            double v2 = (l < 0.5) ? (l * (1 + s)) : ((l + s) - (l * s));
-            double v1 = 2 * l - v2;
-            return Color.FromRgb((byte)(255 * HueToRgb(v1, v2, hue + (1.0 / 3))), (byte)(255 * HueToRgb(v1, v2, hue)), (byte)(255 * HueToRgb(v1, v2, hue - (1.0 / 3))));
+            double v2  = (l < 0.5) ? (l * (1 + s)) : ((l + s) - (l * s));
+            double v1  = 2 * l - v2;
+            return Color.FromRgb(
+                (byte)(255 * HueToRgb(v1, v2, hue + (1.0 / 3))),
+                (byte)(255 * HueToRgb(v1, v2, hue)),
+                (byte)(255 * HueToRgb(v1, v2, hue - (1.0 / 3)))
+            );
         }
 
-        private double HueToRgb(double v1, double v2, double vH) {
-            if (vH < 0) vH += 1; if (vH > 1) vH -= 1;
-            if ((6 * vH) < 1) return (v1 + (v2 - v1) * 6 * vH);
+        private static double HueToRgb(double v1, double v2, double vH)
+        {
+            if (vH < 0) vH += 1;
+            if (vH > 1) vH -= 1;
+            if ((6 * vH) < 1) return v1 + (v2 - v1) * 6 * vH;
             if ((2 * vH) < 1) return v2;
-            if ((3 * vH) < 2) return (v1 + (v2 - v1) * ((2.0 / 3) - vH) * 6);
+            if ((3 * vH) < 2) return v1 + (v2 - v1) * ((2.0 / 3) - vH) * 6;
             return v1;
         }
 
         // ==========================================
         // 10. KAYNAK TEMİZLİĞİ (Kapanış)
         // ==========================================
-        protected override void OnClosed(EventArgs e) 
-        { 
-            _keepAliveTimer?.Stop(); 
+        protected override void OnClosed(EventArgs e)
+        {
+            _keepAliveTimer?.Stop();
+
+            // FIX #3: ses aygıtı düzgün kapatılıyor — kaynak sızıntısı önlenir
+            try
+            {
+                _capture?.StopRecording();
+                _capture?.Dispose();
+            }
+            catch { }
+
             var hwnd = new WindowInteropHelper(this).Handle;
-            UnregisterHotKey(hwnd, HOTKEY_ID); // Hotkey kaydını Windows'tan sil
-            base.OnClosed(e); 
+            UnregisterHotKey(hwnd, HOTKEY_ID);
+
+            base.OnClosed(e);
         }
     }
 }
