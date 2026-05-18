@@ -1,26 +1,66 @@
-# 🎵 MusicWidget - VibeCoding Edition (v1.1)
+# 🎵 MusicWidget (v1.2 - Global Edition)
 
-Windows için tasarlanmış, şık, hafif ve şarkının "akustik imzasına" göre renk değiştiren açık kaynaklı bir medya widget'ı.
+A lightweight, open-source, and zero-dependency desktop music widget built with C# and WPF. It captures system audio natively to render a hardware-based spectrum visualizer and dynamically generates colors based on the playing track.
 
-## ✨ Özellikler
-- **Global Kısayol Tuşu (Yeni!):** `Ctrl + Shift + M` kombinasyonu ile widget'ı anında gizleyin veya geri çağırın. Arka planda ses analizi ve akıllı koruma sistemi kesintisiz çalışmaya devam eder.
-- **Şarkı İmzası (Hash Color):** Her şarkının adı ve sanatçısına özel benzersiz bir renk tonu üretilir (MD5 algoritması ile).
-- **Akıllı Koruma:** Windows'un "Masaüstünü Göster" (Win+D) komutuna karşı inatla ekranda kalma özelliği.
-- **Konum Hafızası:** Widget'ı bir kez sabitlediğinizde, bir sonraki açılışta milimetrik olarak aynı yerde doğar (Sıfır zıplama optimizasyonu).
-- **Yerel ve Güvenli:** Hiçbir dış servise veya sertifikaya ihtiyaç duymaz, tamamen şeffaf kod yapısı.
+Abonelik sistemlerine ve dayatmacı yazılımlara karşı; tamamen yerel, hafif, açık kaynaklı ve görev çubuğuna gömülebilen C# WPF müzik widget'ı.
 
-## 🛠️ Teknik Detaylar
-- **Dil:** C# / .NET
-- **Arayüz:** WPF (Windows Presentation Foundation)
-- **Ses Analizi:** NAudio üzerinden Wasapi Loopback Capture ile donanım seviyesinde spektrum okuma.
-- **Medya Kontrolü:** Windows System Media Transport Controls (SMTC).
-- **Sistem Entegrasyonu:** Görünürlük döngüsü ve Anti-Minimize koruması için düşük seviyeli Win32 API kancaları (Hook).
+---
 
-## 🚀 Kurulum ve Kullanım
-1. [Releases](https://github.com/ibrahimgun-dev/MusicWidget/releases) sekmesinden en güncel sürümü indirin veya projeyi yerelinize klonlayın.
-2. Bağımsız bir `.exe` oluşturmak için terminalde şu komutu çalıştırın:
-   `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true`
-3. Çıktı alınan Widget'ı istediğiniz yere sürükleyin ve sağ tıklayıp **"Konumu Sabitle"** (Pin) deyin.
-4. İstediğiniz an ekranda gizlemek veya göstermek için klavyeden **Ctrl + Shift + M** tuşlarına basın.
+## 📺 Project Showcase & VibeCoding Story
+Click the image below to watch how this widget was built, its features, and the "Anti-Minimize" demonstration in action!
 
-> *"Bu proje, hazır ve güvenilmez araçlar yerine 'VibeCoding' mantığıyla tamamen yerel ihtiyaçlar için geliştirilmiştir."*
+[![MusicWidget Showcase](https://img.youtube.com/vi/5GT3bpoNrGc/0.jpg)](https://youtu.be/5GT3bpoNrGc)
+
+---
+
+## ✨ Features / Özellikler
+
+### English 🌐
+- **Pixel-Perfect Taskbar Integration:** Exactly 48px height to blend seamlessly into the Windows 11 taskbar without overflowing.
+- **Fluent Semi-Transparent Look:** Transparent background (`#33808080`) mimicking the Windows 11 widget style.
+- **Multi-language Support:** Instantly switch between English and Turkish via the right-click menu. (Saves preference to `lang.txt`).
+- **Windows Resistent (Anti-Minimize):** Resists `Win+D` or "Show Desktop" commands. It stays anchored to your desktop/taskbar.
+- **Mathematical Hash Color:** Dynamically generates a unique HSL color palette based on the track title and artist name.
+- **Hardware Audio Spectrum:** Real-time system audio capture using `NAudio` (WasapiLoopbackCapture) with zero lag.
+- **Global Hotkey:** Toggle widget visibility instantly from anywhere using `Ctrl + Shift + M`.
+
+### Türkçe 🇹🇷
+- **Milimetrik Görev Çubuğu Entegrasyonu:** Windows 11 görev çubuğuna (48px) tam oturan, taşma yapmayan mikro kapsül tasarımı.
+- **Saydam Modern Görünüm:** Görev çubuğu dokusunu arkadan hissettiren yarı saydam (`#33808080`) şık arka plan.
+- **Canlı Dil Desteği:** Sağ tık menüsünden anında İngilizce ve Türkçe arasında geçiş (Tercihinizi `lang.txt` içinde hatırlar).
+- **Windows'a Direnen Yapı (Anti-Minimize):** `Win+D` yapıldığında veya masaüstünü göster dendiğinde gizlenmez, yerini terk etmez.
+- **Matematiksel Akustik Renk İmzası:** Şarkı adı ve sanatçı bilgisinin Hash kodundan dinamik ve benzersiz renk paleti üretir.
+- **Donanımsal Ses Spektrumu:** `NAudio` altyapısı ile ses kartından gecikmesiz, anlık frekans yakalama ve görselleştirme.
+- **Global Kısayol Tuşu:** `Ctrl + Shift + M` kombinasyonu ile widget'ı her yerden anında gizleyebilir veya gösterebilirsiniz.
+
+---
+
+## ⌨️ Controls & Shortcuts / Kontroller ve Kısayollar
+
+- `Ctrl + Shift + M` : Toggle Visibility (Gizle / Göster)
+- `Mouse Left Click + Drag` : Move Widget (Eğer konum sabitlenmemişse sürükle)
+- `Right Click` : Opens Context Menu / Sağ Tık Menüsü:
+  - **Pin Position / Konumu Sabitle** (Sürüklemeyi kapatır ve konumu `pos.txt` içine kaydeder)
+  - **Language / Dil** (Anında EN/TR arası canlı geçiş yapar)
+  - **Exit / Çıkış**
+
+---
+
+## 📦 How to Run / Nasıl Çalıştırılır?
+
+1. Go to the [Releases](https://github.com/ibrahimgun-dev/MusicWidget/releases) section.
+2. Download the latest `MusicWidget.exe`.
+3. Run it! (No installation required, single portable file).
+
+*Not: Uygulama ilk açıldığında ekranın sağ altına hizalanır. Sağ tıklayıp "Konumu Sabitle" tikini kaldırarak görev çubuğunuzun üzerine sürükleyebilir, ardından tekrar sabitleyebilirsiniz.*
+
+---
+
+## 🛠️ Built With
+- **C# / .NET 8**
+- **WPF (Windows Presentation Foundation)**
+- **NAudio** - For hardware-level loopback audio capture
+- **Windows.Media.Control** - For global system media transport handling
+
+---
+Concept developed under the **VibeCoding** philosophy. Pure logic, zero bloatware. Made by [ibrahimgun-dev](https://github.com/ibrahimgun-dev).
