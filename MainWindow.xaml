@@ -4,6 +4,7 @@
         Title="MusicWidget" Height="48" Width="350"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
         Loaded="MainWindow_Loaded">
 
     <Window.Resources>

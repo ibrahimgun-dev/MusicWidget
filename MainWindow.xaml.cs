@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Diagnostics;          // Debug logging
 using NAudio.Wave;
 using Windows.Media.Control;
 
@@ -597,7 +598,7 @@ namespace MusicWidget
                 bitmap.EndInit();
                 AlbumArt.Source = bitmap;
             }
-            catch { }
+            catch (Exception ex) { Log(ex); }
         }
 
         private async void PrevBtn_Click(object sender, RoutedEventArgs e)
@@ -649,7 +650,7 @@ namespace MusicWidget
                 _capture.DataAvailable += OnAudioDataAvailable;
                 _capture.StartRecording();
             }
-            catch { }
+            catch (Exception ex) { Log(ex); }
         }
 
         private void OnAudioDataAvailable(object? sender, WaveInEventArgs e)
@@ -728,12 +729,24 @@ namespace MusicWidget
         // 16. YARDIMCI & TEMİZLİK
         // ══════════════════════════════════════════
 
-        private static void TrySave(Action action) { try { action(); } catch { } }
+        private static void TrySave(Action action)
+        {
+            try   { action(); }
+            catch (Exception ex) { Log(ex); }
+        }
+
+        /// <summary>
+        /// Hataları debug çıktısına yazar. Release build'de no-op.
+        /// Production loglaması için buraya dosya/telemetri eklenebilir.
+        /// </summary>
+        [Conditional("DEBUG")]
+        private static void Log(Exception ex) =>
+            Debug.WriteLine($"[MusicWidget] {DateTime.Now:HH:mm:ss} — {ex.GetType().Name}: {ex.Message}");
 
         protected override void OnClosed(EventArgs e)
         {
             _keepAliveTimer?.Stop();
-            try { _capture?.StopRecording(); _capture?.Dispose(); } catch { }
+            try { _capture?.StopRecording(); _capture?.Dispose(); } catch (Exception ex) { Log(ex); }
             UnregisterHotKey(new WindowInteropHelper(this).Handle, HOTKEY_ID);
             base.OnClosed(e);
         }
