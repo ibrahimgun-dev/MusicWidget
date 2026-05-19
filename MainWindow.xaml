@@ -3,21 +3,21 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="MusicWidget" Height="48" Width="350"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        Topmost="True" ShowInTaskbar="False" Loaded="MainWindow_Loaded">
+        Topmost="True" ShowInTaskbar="False"
+        Loaded="MainWindow_Loaded">
 
     <Window.Resources>
-        <!-- Placeholder metinler — ApplyLanguage() runtime'da bunları günceller -->
+        <!-- Placeholder metinler — ApplyLanguage() runtime'da günceller -->
         <System:String x:Key="DefaultTitle"  xmlns:System="clr-namespace:System;assembly=mscorlib">Bilinmiyor</System:String>
         <System:String x:Key="DefaultArtist" xmlns:System="clr-namespace:System;assembly=mscorlib">Şarkı bekleniyor...</System:String>
 
-        <!-- Buton stili -->
         <Style TargetType="Button">
-            <Setter Property="Background"       Value="Transparent"/>
-            <Setter Property="BorderThickness"  Value="0"/>
-            <Setter Property="Padding"          Value="0"/>
-            <Setter Property="Margin"           Value="0.5,0,0.5,0"/>
-            <Setter Property="Foreground"       Value="White"/>
-            <Setter Property="Cursor"           Value="Hand"/>
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="0"/>
+            <Setter Property="Margin"          Value="0.5,0,0.5,0"/>
+            <Setter Property="Foreground"      Value="White"/>
+            <Setter Property="Cursor"          Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -41,10 +41,11 @@
 
         <Border.ContextMenu>
             <ContextMenu>
-                <MenuItem x:Name="PinMenuItem"  Header="Konumu Sabitle" IsCheckable="True" Click="TogglePin_Click"/>
-                <MenuItem x:Name="LangMenuItem" Header="Language: English"               Click="LangMenuItem_Click"/>
+                <MenuItem x:Name="PinMenuItem"  Header="Konumu Sabitle"         IsCheckable="True" Click="TogglePin_Click"/>
+                <MenuItem x:Name="DockMenuItem" Header="Görev Çubuğuna Kenetle" IsCheckable="True" Click="ToggleDock_Click"/>
+                <MenuItem x:Name="LangMenuItem" Header="Language: English"                         Click="LangMenuItem_Click"/>
                 <Separator Background="#22FFFFFF"/>
-                <MenuItem x:Name="ExitMenuItem" Header="Çıkış"                           Click="Exit_Click"/>
+                <MenuItem x:Name="ExitMenuItem" Header="Çıkış"                                     Click="Exit_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
 
@@ -93,9 +94,9 @@
             <!-- Medya Kontrolleri -->
             <StackPanel Grid.Column="2" Orientation="Horizontal"
                         VerticalAlignment="Center" Opacity="0.8">
-                <Button x:Name="PrevBtn"      Content="⏮" Width="16" Height="16" FontSize="10"  Click="PrevBtn_Click"/>
-                <Button x:Name="PlayPauseBtn" Content="⏯" Width="20" Height="20" FontSize="13"  Click="PlayPauseBtn_Click" Margin="1,0,1,0"/>
-                <Button x:Name="NextBtn"      Content="⏭" Width="16" Height="16" FontSize="10"  Click="NextBtn_Click"/>
+                <Button x:Name="PrevBtn"      Content="⏮" Width="16" Height="16" FontSize="10" Click="PrevBtn_Click"/>
+                <Button x:Name="PlayPauseBtn" Content="⏯" Width="20" Height="20" FontSize="13" Click="PlayPauseBtn_Click" Margin="1,0"/>
+                <Button x:Name="NextBtn"      Content="⏭" Width="16" Height="16" FontSize="10" Click="NextBtn_Click"/>
             </StackPanel>
         </Grid>
     </Border>
