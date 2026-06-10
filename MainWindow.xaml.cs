@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;                        // AsStreamForRead() extension metodu
-using IO = System.IO;                   // System.Windows.Shapes.Path çakışmasını önler
+using System.IO;
+using IO = System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,7 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-using System.Diagnostics;          // Debug logging
+using System.Diagnostics;
 using NAudio.Wave;
 using Windows.Media.Control;
 
@@ -29,7 +29,6 @@ namespace MusicWidget
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
-        // 32/64-bit güvenli WindowLong sarmalayıcıları
         [DllImport("user32.dll", EntryPoint = "GetWindowLong")]    private static extern int    GetWindowLong32   (IntPtr hWnd, int nIndex);
         [DllImport("user32.dll", EntryPoint = "SetWindowLong")]    private static extern int    SetWindowLong32   (IntPtr hWnd, int nIndex, int    newLong);
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")] private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
@@ -67,7 +66,7 @@ namespace MusicWidget
         private const uint SWP_HIDEWINDOW   = 0x0080;
 
         private const int GWL_EXSTYLE      = -20;
-        private const int GWL_HWNDPARENT   = -8;   // Owner ilişkisi (SetParent değil!)
+        private const int GWL_HWNDPARENT   = -8;
         private const int WS_EX_NOACTIVATE = 0x08000000;
 
         private const int  HOTKEY_ID            = 9000;
@@ -77,7 +76,7 @@ namespace MusicWidget
         private const int  SC_MINIMIZE          = 0xF020;
         private const uint MOD_CONTROL          = 0x0002;
         private const uint MOD_SHIFT            = 0x0004;
-        private const uint VK_M                 = 0x4D;   // Ctrl+Shift+M
+        private const uint VK_M                 = 0x4D;
 
         // ══════════════════════════════════════════
         // 3. VİZÜELİZER SABİTLERİ
@@ -99,7 +98,35 @@ namespace MusicWidget
         private const int    KeepAliveIntervalMs   = 200;
 
         // ══════════════════════════════════════════
-        // 4. GLOBAL DEĞİŞKENLER
+        // 4. TEMA SABİTLERİ
+        // ══════════════════════════════════════════
+
+        private enum WidgetTheme { Dark, Transparent, Light }
+
+        private static readonly Dictionary<WidgetTheme, string> ThemeBackgrounds = new()
+        {
+            { WidgetTheme.Dark,        "#CC1a1a1a" },
+            { WidgetTheme.Transparent, "#33808080" },
+            { WidgetTheme.Light,       "#CCf0f0f0" }
+        };
+
+        // Açık temada yazılar siyah, diğerlerinde beyaz
+        private static readonly Dictionary<WidgetTheme, string> ThemeForegrounds = new()
+        {
+            { WidgetTheme.Dark,        "#FFFFFF"   },
+            { WidgetTheme.Transparent, "#FFFFFF"   },
+            { WidgetTheme.Light,       "#111111"   }
+        };
+
+        private static readonly Dictionary<WidgetTheme, string> ThemeArtistForegrounds = new()
+        {
+            { WidgetTheme.Dark,        "#A0A0A0"   },
+            { WidgetTheme.Transparent, "#A0A0A0"   },
+            { WidgetTheme.Light,       "#444444"   }
+        };
+
+        // ══════════════════════════════════════════
+        // 5. GLOBAL DEĞİŞKENLER
         // ══════════════════════════════════════════
 
         private GlobalSystemMediaTransportControlsSessionManager? _manager;
@@ -110,22 +137,23 @@ namespace MusicWidget
         private DispatcherTimer?     _keepAliveTimer;
         private double               _currentBaseHue = 190.0;
 
-        private bool   _isPinned         = true;
-        private bool   _isDocked         = false;
-        private bool   _isInternalAction = false;  // Hook'un kendi hareketleriyle çakışmasını önler
-        private bool   _isLoaded         = false;  // Başlangıçta hook'un erken tetiklenmesini önler
-        private double _savedLeft        = 0;      // Undock'ta geri dönülecek konum
-        private double _savedTop         = 0;
+        private bool        _isPinned         = true;
+        private bool        _isDocked         = false;
+        private bool        _isInternalAction = false;
+        private bool        _isLoaded         = false;
+        private double      _savedLeft        = 0;
+        private double      _savedTop         = 0;
+        private WidgetTheme _currentTheme     = WidgetTheme.Dark;
 
-        // AppData dosya yolları
         private static readonly string _appDataDir =
             IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MusicWidget");
-        private readonly string _posFile  = IO.Path.Combine(_appDataDir, "pos.txt");
-        private readonly string _langFile = IO.Path.Combine(_appDataDir, "lang.txt");
-        private readonly string _dockFile = IO.Path.Combine(_appDataDir, "dock.txt");
+        private readonly string _posFile   = IO.Path.Combine(_appDataDir, "pos.txt");
+        private readonly string _langFile  = IO.Path.Combine(_appDataDir, "lang.txt");
+        private readonly string _dockFile  = IO.Path.Combine(_appDataDir, "dock.txt");
+        private readonly string _themeFile = IO.Path.Combine(_appDataDir, "theme.txt");
 
         // ══════════════════════════════════════════
-        // 5. DİL SÖZLÜKLERİ
+        // 6. DİL SÖZLÜKLERİ
         // ══════════════════════════════════════════
 
         private bool _isEnglish = false;
@@ -153,14 +181,14 @@ namespace MusicWidget
         private Dictionary<string, string> CurrentTexts => _isEnglish ? _textsEN : _textsTR;
 
         // ══════════════════════════════════════════
-        // 6. BAŞLATICI
+        // 7. BAŞLATICI
         // ══════════════════════════════════════════
 
         public MainWindow()
         {
             InitializeComponent();
             EnsureAppDataDir();
-            LoadSettings();          // _isDocked, _isPinned, konum, dil
+            LoadSettings();
             SetupVisualizer();
             StartListening();
             SetupWindowBehavior();
@@ -170,20 +198,17 @@ namespace MusicWidget
         private void SetupWindowBehavior()
         {
             this.Topmost = true;
-
-            // Yedek: SC_MINIMIZE hook'tan kaçarsa yakalar
             this.StateChanged += (_, _) =>
             {
                 if (this.WindowState == WindowState.Minimized)
                     this.WindowState = WindowState.Normal;
             };
-
             this.Deactivated += (_, _) => ForceTopmost();
             SetupKeepOnTop();
         }
 
         // ══════════════════════════════════════════
-        // 7. WIN32 HOOK — MİNİMİZE & POZİSYON KORUMASI
+        // 8. WIN32 HOOK
         // ══════════════════════════════════════════
 
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
@@ -192,15 +217,12 @@ namespace MusicWidget
             var source = HwndSource.FromHwnd(hwnd);
             source?.AddHook(HwndHook);
             RegisterHotKey(hwnd, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_M);
-
-            // Tıklandığında odak çalmayan pencere stili
             var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             SetWindowLong(hwnd, GWL_EXSTYLE, new IntPtr(exStyle.ToInt64() | WS_EX_NOACTIVATE));
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // ── Ctrl+Shift+M: göster/gizle ──────────────────────────
             if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
             {
                 ToggleWidgetVisibility();
@@ -208,23 +230,18 @@ namespace MusicWidget
                 return IntPtr.Zero;
             }
 
-            // ── Katman 1: SC_MINIMIZE mesajını yut ──────────────────
             if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
             {
                 handled = true;
                 return IntPtr.Zero;
             }
 
-            // ── Katman 2: Pozisyon değişimlerini denetle ─────────────
-            // _isLoaded: başlangıç tamamlanmadan çalışma
-            // _isInternalAction: kendi SetWindowPos çağrılarıyla çakışma
             if (msg == WM_WINDOWPOSCHANGING && _isLoaded && !_isInternalAction)
             {
                 var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
 
                 if (_isDocked)
                 {
-                    // Dock modunda: yalnızca gerçek hareket sırasında Y eksenini kilitle
                     if ((wp.flags & SWP_NOMOVE) == 0)
                     {
                         IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
@@ -237,10 +254,8 @@ namespace MusicWidget
                 }
                 else
                 {
-                    // Serbest modda: -32000 minimize koordinatını ve hide bayrağını engelle
                     bool isMinimizing = wp.x <= -30000 || wp.y <= -30000;
                     bool isHiding     = (wp.flags & SWP_HIDEWINDOW) != 0;
-
                     if (isMinimizing || isHiding)
                     {
                         wp.flags &= ~SWP_HIDEWINDOW;
@@ -248,7 +263,6 @@ namespace MusicWidget
                     }
                 }
 
-                // FIX: false — blittable struct için doğru parametre
                 Marshal.StructureToPtr(wp, lParam, false);
             }
 
@@ -256,7 +270,7 @@ namespace MusicWidget
         }
 
         // ══════════════════════════════════════════
-        // 8. TOPMOST & GÖRÜNÜRLÜK
+        // 9. TOPMOST & GÖRÜNÜRLÜK
         // ══════════════════════════════════════════
 
         private void ForceTopmost()
@@ -306,7 +320,7 @@ namespace MusicWidget
         }
 
         // ══════════════════════════════════════════
-        // 9. GÖREV ÇUBUĞUNA KENETLEME (DOCK)
+        // 10. DOCK
         // ══════════════════════════════════════════
 
         private void ToggleDock_Click(object sender, RoutedEventArgs e) =>
@@ -323,22 +337,15 @@ namespace MusicWidget
                 if (dock)
                 {
                     if (taskbarHwnd == IntPtr.Zero) return;
-
-                    // Undock için mevcut konumu sakla (ilk dock'ta çağrılır)
-                    if (!_isDocked)
-                    {
-                        _savedLeft = this.Left;
-                        _savedTop  = this.Top;
-                    }
+                    if (!_isDocked) { _savedLeft = this.Left; _savedTop = this.Top; }
 
                     GetWindowRect(taskbarHwnd, out RECT tb);
                     GetWindowRect(hwnd,        out RECT wr);
 
                     int w = wr.Right  - wr.Left;
                     int h = wr.Bottom - wr.Top;
-                    int x = wr.Left;   // Yatay konum serbest kalır
+                    int x = wr.Left;
 
-                    // Görev çubuğunu owner yap (SetParent değil — koordinat kırılması olmaz)
                     SetWindowLong(hwnd, GWL_HWNDPARENT, taskbarHwnd);
                     SetWindowPos(hwnd, HWND_TOPMOST, x, tb.Top, w, h,
                                  SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -351,43 +358,30 @@ namespace MusicWidget
                 }
                 else
                 {
-                    // Owner bağını kopar
                     SetWindowLong(hwnd, GWL_HWNDPARENT, IntPtr.Zero);
                     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
                     _isDocked = false;
                     if (PinMenuItem != null) PinMenuItem.IsEnabled = true;
-
-                    // FIX: _savedLeft/_savedTop her zaman geçerli bir değer taşır
                     this.Left = _savedLeft;
                     this.Top  = _savedTop;
-
                     TrySave(() => IO.File.WriteAllText(_dockFile, "0"));
                 }
             }
             finally { _isInternalAction = false; }
         }
 
-        /// <summary>
-        /// Sürükleme bittiğinde widget görev çubuğuyla kesişiyorsa otomatik kenetler.
-        /// </summary>
         private void CheckAndAutoDock()
         {
             if (_isDocked) return;
-
             var    hwnd        = new WindowInteropHelper(this).Handle;
             IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
             if (taskbarHwnd == IntPtr.Zero) return;
-
             GetWindowRect(hwnd,        out RECT wr);
             GetWindowRect(taskbarHwnd, out RECT tb);
-
-            bool intersects = wr.Left   < tb.Right  &&
-                              wr.Right  > tb.Left   &&
-                              wr.Top    < tb.Bottom &&
-                              wr.Bottom > tb.Top;
-
+            bool intersects = wr.Left < tb.Right && wr.Right > tb.Left &&
+                              wr.Top  < tb.Bottom && wr.Bottom > tb.Top;
             if (intersects)
             {
                 if (DockMenuItem != null) DockMenuItem.IsChecked = true;
@@ -396,7 +390,40 @@ namespace MusicWidget
         }
 
         // ══════════════════════════════════════════
-        // 10. AYARLAR (KONUM, DİL, DOCK)
+        // 11. TEMA YÖNETİMİ
+        // ══════════════════════════════════════════
+
+        private void ThemeDark_Click(object sender, RoutedEventArgs e)        => ApplyTheme(WidgetTheme.Dark);
+        private void ThemeTransparent_Click(object sender, RoutedEventArgs e) => ApplyTheme(WidgetTheme.Transparent);
+        private void ThemeLight_Click(object sender, RoutedEventArgs e)       => ApplyTheme(WidgetTheme.Light);
+
+        private void ApplyTheme(WidgetTheme theme)
+        {
+            _currentTheme = theme;
+
+            if (MainBorder != null)
+                MainBorder.Background = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString(ThemeBackgrounds[theme]));
+
+            var fg       = ThemeForegrounds[theme];
+            var artistFg = ThemeArtistForegrounds[theme];
+
+            if (TrackName  != null) TrackName.Foreground  = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fg));
+            if (ArtistName != null) ArtistName.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(artistFg));
+
+            UpdateThemeMenuChecks(theme);
+            TrySave(() => IO.File.WriteAllText(_themeFile, theme.ToString()));
+        }
+
+        private void UpdateThemeMenuChecks(WidgetTheme theme)
+        {
+            if (ThemeDark        != null) ThemeDark.IsChecked        = theme == WidgetTheme.Dark;
+            if (ThemeTransparent != null) ThemeTransparent.IsChecked = theme == WidgetTheme.Transparent;
+            if (ThemeLight       != null) ThemeLight.IsChecked       = theme == WidgetTheme.Light;
+        }
+
+        // ══════════════════════════════════════════
+        // 12. AYARLAR
         // ══════════════════════════════════════════
 
         private static void EnsureAppDataDir() =>
@@ -405,8 +432,9 @@ namespace MusicWidget
         private void LoadSettings()
         {
             LoadLanguageSetting();
-            LoadPositionSetting();   // _savedLeft/_savedTop da burada set edilir
+            LoadPositionSetting();
             LoadDockSetting();
+            LoadThemeSetting();
         }
 
         private void LoadLanguageSetting()
@@ -429,8 +457,6 @@ namespace MusicWidget
                     this.Left  = double.Parse(parts[0]);
                     this.Top   = double.Parse(parts[1]);
                     _isPinned  = true;
-
-                    // FIX: Dock'lu başlayıp undock yapılırsa doğru konuma döner
                     _savedLeft = this.Left;
                     _savedTop  = this.Top;
                     return;
@@ -438,7 +464,6 @@ namespace MusicWidget
             }
             catch { }
 
-            // Kayıtlı konum yoksa — ekranın sağ altı
             this.Top   = SystemParameters.PrimaryScreenHeight - this.Height;
             this.Left  = SystemParameters.PrimaryScreenWidth  - 450;
             _savedLeft = this.Left;
@@ -456,25 +481,34 @@ namespace MusicWidget
             catch { }
         }
 
+        private void LoadThemeSetting()
+        {
+            try
+            {
+                if (IO.File.Exists(_themeFile))
+                {
+                    if (Enum.TryParse<WidgetTheme>(IO.File.ReadAllText(_themeFile).Trim(), out var t))
+                        _currentTheme = t;
+                }
+            }
+            catch { }
+        }
+
         private void SavePosition()
         {
-            if (_isDocked) return;  // Dock'luyken konum kaydetme
+            if (_isDocked) return;
             TrySave(() => IO.File.WriteAllText(_posFile, $"{this.Left}|{this.Top}"));
         }
 
         // ══════════════════════════════════════════
-        // 11. SÜRÜKLEME & SABITLEME
+        // 13. SÜRÜKLEME & SABITLEME
         // ══════════════════════════════════════════
 
         private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (!_isPinned && !_isDocked && e.ChangedButton == MouseButton.Left)
             {
-                try
-                {
-                    this.DragMove();
-                    CheckAndAutoDock();   // Bırakınca görev çubuğu kontrolü
-                }
+                try { this.DragMove(); CheckAndAutoDock(); }
                 catch { }
             }
         }
@@ -489,7 +523,7 @@ namespace MusicWidget
         private void Exit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
 
         // ══════════════════════════════════════════
-        // 12. DİL YÖNETİMİ
+        // 14. DİL YÖNETİMİ
         // ══════════════════════════════════════════
 
         private void ApplyLanguage()
@@ -518,7 +552,7 @@ namespace MusicWidget
         }
 
         // ══════════════════════════════════════════
-        // 13. WINDOWS MEDYA SESSİON (SMTC)
+        // 15. WINDOWS MEDYA SESSİON (SMTC)
         // ══════════════════════════════════════════
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -526,10 +560,11 @@ namespace MusicWidget
             if (PinMenuItem != null) PinMenuItem.IsChecked = _isPinned;
             this.Cursor = _isPinned ? Cursors.Arrow : Cursors.SizeAll;
             ApplyLanguage();
+            ApplyTheme(_currentTheme);   // Kayıtlı temayı uygula
+            UpdateThemeMenuChecks(_currentTheme);
             ForceTopmost();
 
             _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-
             if (_manager != null)
             {
                 _manager.CurrentSessionChanged += (s, _) =>
@@ -537,10 +572,8 @@ namespace MusicWidget
                 UpdateSession(_manager.GetCurrentSession());
             }
 
-            // Tüm başlangıç işlemleri tamamlandı, hook aktif olabilir
             _isLoaded = true;
 
-            // Dock ayarı dosyadan geldiyse uygula
             if (_isDocked)
             {
                 if (DockMenuItem != null) DockMenuItem.IsChecked = true;
@@ -558,9 +591,8 @@ namespace MusicWidget
 
         private async void UpdateMediaProperties()
         {
-            var session = _session;   // Race condition için lokal kopya
+            var session = _session;
             if (session == null) return;
-
             var props = await session.TryGetMediaPropertiesAsync();
             if (props == null) return;
 
@@ -575,7 +607,6 @@ namespace MusicWidget
             await TryLoadAlbumArtAsync(props);
         }
 
-        /// <summary>Şarkı adı + sanatçıdan tutarlı bir HSL hue üretir (Hash Color).</summary>
         private void UpdateHashColor(string title, string artist)
         {
             var id = title + artist;
@@ -583,7 +614,6 @@ namespace MusicWidget
                 _currentBaseHue = Math.Abs(id.GetHashCode()) % 360;
         }
 
-        /// <summary>SMTC thumbnail'ini albüm kapağı olarak yükler.</summary>
         private async System.Threading.Tasks.Task TryLoadAlbumArtAsync(
             GlobalSystemMediaTransportControlsSessionMediaProperties props)
         {
@@ -601,23 +631,12 @@ namespace MusicWidget
             catch (Exception ex) { Log(ex); }
         }
 
-        private async void PrevBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_session != null) await _session.TrySkipPreviousAsync();
-        }
-
-        private async void PlayPauseBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_session != null) await _session.TryTogglePlayPauseAsync();
-        }
-
-        private async void NextBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (_session != null) await _session.TrySkipNextAsync();
-        }
+        private async void PrevBtn_Click(object sender, RoutedEventArgs e)      { if (_session != null) await _session.TrySkipPreviousAsync(); }
+        private async void PlayPauseBtn_Click(object sender, RoutedEventArgs e) { if (_session != null) await _session.TryTogglePlayPauseAsync(); }
+        private async void NextBtn_Click(object sender, RoutedEventArgs e)      { if (_session != null) await _session.TrySkipNextAsync(); }
 
         // ══════════════════════════════════════════
-        // 14. SES SPEKTRUMU (NAudio)
+        // 16. SES SPEKTRUMU (NAudio)
         // ══════════════════════════════════════════
 
         private void SetupVisualizer()
@@ -660,7 +679,6 @@ namespace MusicWidget
             Dispatcher.InvokeAsync(() => UpdateBars(peaks));
         }
 
-        /// <summary>Ham PCM buffer'dan her bar için tepe genliği hesaplar.</summary>
         private static float[] ComputePeaks(WaveInEventArgs e)
         {
             var peaks       = new float[BarCount];
@@ -671,7 +689,6 @@ namespace MusicWidget
                 float max   = 0;
                 int   start = i * bytesPerBar;
                 int   end   = Math.Min(start + bytesPerBar, e.BytesRecorded);
-
                 for (int j = start; j < end - 3; j += 4)
                 {
                     float s = Math.Abs(BitConverter.ToSingle(e.Buffer, j));
@@ -682,7 +699,6 @@ namespace MusicWidget
             return peaks;
         }
 
-        /// <summary>Peak değerlerine göre bar yüksekliklerini ve renklerini günceller.</summary>
         private void UpdateBars(float[] peaks)
         {
             for (int i = 0; i < BarCount; i++)
@@ -701,7 +717,7 @@ namespace MusicWidget
         }
 
         // ══════════════════════════════════════════
-        // 15. RENK DÖNÜŞÜMÜ (HSL → RGB)
+        // 17. RENK DÖNÜŞÜMÜ (HSL → RGB)
         // ══════════════════════════════════════════
 
         private static Color HslToRgb(double h, double s, double l)
@@ -726,7 +742,7 @@ namespace MusicWidget
         }
 
         // ══════════════════════════════════════════
-        // 16. YARDIMCI & TEMİZLİK
+        // 18. YARDIMCI & TEMİZLİK
         // ══════════════════════════════════════════
 
         private static void TrySave(Action action)
@@ -735,10 +751,6 @@ namespace MusicWidget
             catch (Exception ex) { Log(ex); }
         }
 
-        /// <summary>
-        /// Hataları debug çıktısına yazar. Release build'de no-op.
-        /// Production loglaması için buraya dosya/telemetri eklenebilir.
-        /// </summary>
         [Conditional("DEBUG")]
         private static void Log(Exception ex) =>
             Debug.WriteLine($"[MusicWidget] {DateTime.Now:HH:mm:ss} — {ex.GetType().Name}: {ex.Message}");

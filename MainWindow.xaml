@@ -8,7 +8,6 @@
         Loaded="MainWindow_Loaded">
 
     <Window.Resources>
-        <!-- Placeholder metinler — ApplyLanguage() runtime'da günceller -->
         <System:String x:Key="DefaultTitle"  xmlns:System="clr-namespace:System;assembly=mscorlib">Bilinmiyor</System:String>
         <System:String x:Key="DefaultArtist" xmlns:System="clr-namespace:System;assembly=mscorlib">Şarkı bekleniyor...</System:String>
 
@@ -36,7 +35,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#33808080" CornerRadius="10" Padding="6,4,6,4"
+    <Border x:Name="MainBorder" Background="#CC1a1a1a" CornerRadius="10" Padding="6,4,6,4"
             MouseLeftButtonDown="Border_MouseLeftButtonDown"
             VerticalAlignment="Center" Height="40" Margin="0">
 
@@ -44,9 +43,14 @@
             <ContextMenu>
                 <MenuItem x:Name="PinMenuItem"  Header="Konumu Sabitle"         IsCheckable="True" Click="TogglePin_Click"/>
                 <MenuItem x:Name="DockMenuItem" Header="Görev Çubuğuna Kenetle" IsCheckable="True" Click="ToggleDock_Click"/>
-                <MenuItem x:Name="LangMenuItem" Header="Language: English"                         Click="LangMenuItem_Click"/>
+                <MenuItem Header="Tema">
+                    <MenuItem x:Name="ThemeDark"        Header="● Koyu"    Click="ThemeDark_Click"/>
+                    <MenuItem x:Name="ThemeTransparent" Header="○ Saydam"  Click="ThemeTransparent_Click"/>
+                    <MenuItem x:Name="ThemeLight"       Header="◐ Açık"   Click="ThemeLight_Click"/>
+                </MenuItem>
+                <MenuItem x:Name="LangMenuItem" Header="Language: English" Click="LangMenuItem_Click"/>
                 <Separator Background="#22FFFFFF"/>
-                <MenuItem x:Name="ExitMenuItem" Header="Çıkış"                                     Click="Exit_Click"/>
+                <MenuItem x:Name="ExitMenuItem" Header="Çıkış" Click="Exit_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
 
