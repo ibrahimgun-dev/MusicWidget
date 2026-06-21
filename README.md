@@ -36,4 +36,5 @@ dotnet publish -c Release
 - **Architecture:** Win32 API Interop (DPI Aware)
 
 ---
-*VibeCoding felsefesiyle, şişkin kütüphaneler olmadan, doğrudan sistem seviyesinde geliştirilmiştir.*
+> "Bu proje, hazır ve güvenilmez araçlar yerine 'VibeCoding' mantığıyla  şişkin kütüphaneler olmadan, doğrudan sistem seviyesinde tamamen yerel ihtiyaçlar için geliştirilmiştir."
+
